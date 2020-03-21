@@ -1,15 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Fri Mar 13 15:25:48 2020
-
-@author: zack
-"""
-
-#!/usr/bin/env python
-# coding: utf-8
-
-
 import requests
 import pandas as pd
 import io
