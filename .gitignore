@@ -2,7 +2,7 @@
 *.csv
 *.png
 /data
-/woo_cache
+*/woo_cache
 weather.py
 .idea
 
