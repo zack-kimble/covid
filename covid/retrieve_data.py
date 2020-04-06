@@ -28,7 +28,7 @@ import urllib
 config = dict(
     use_local=False,
     index_col=['Country/Region', 'Province/State', 'Lat', 'Long', 'date'],
-    weather_api_key='api_key_here',
+    weather_api_key='',
     data_dir='data'
 )
 
@@ -69,18 +69,18 @@ def filter_provinces(full_df, min_deaths, min_cases):
 
 def retrieve_data(config=config):
     deaths_df = get_melt_clean(
-        url='https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Deaths.csv',
+        url='https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_global.csv',
         value_name='deaths',
         use_local=config['use_local'],
         data_dir=config['data_dir']
         )
     cases_df = get_melt_clean(
-        url='https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Confirmed.csv',
+        url='https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv',
         value_name='cases',
         use_local=config['use_local'],
         data_dir = config['data_dir'])
     recovered_df = get_melt_clean(
-        url='https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Recovered.csv',
+        url='https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_recovered_global.csv',
         value_name='recoveries',
         use_local=config['use_local'],
         data_dir=config['data_dir'])
@@ -109,6 +109,7 @@ def retrieve_data(config=config):
         hist_weather_df_cache = pd.read_csv(config['data_dir'] + '/wwo_cache.csv')
         hist_weather_df_cache['date'] = pd.to_datetime(hist_weather_df_cache['date'])
         hist_weather_df_cache = hist_weather_df_cache.set_index(['Lat', 'Long', 'date'])
+        assert hist_weather_df_cache.index.is_unique
 
     except FileNotFoundError:
         hist_weather_df_cache = pd.DataFrame()
@@ -152,7 +153,7 @@ def retrieve_data(config=config):
                 print('network issue, saving retrieved and exiting')
                 break
         # TODO: need to check cached responses even if there's a current connection failure. There's some mixed up dependencies though. Caches are checked inside wwo_hist, but this is feeding requests one by one
-        try:
+        if len(hist_weather_list) >0:
             hist_weather_df_new = pd.concat(hist_weather_list)
             hist_weather_df_new['Lat'] = hist_weather_df_new['location'].apply(lambda x: x.split(',')[0]).astype(
                 'float')
@@ -162,10 +163,11 @@ def retrieve_data(config=config):
             hist_weather_df_new.set_index(['Lat', 'Long', 'date'], inplace=True)
             hist_weather_df = pd.concat([hist_weather_df_cache, hist_weather_df_new], verify_integrity=True)
             hist_weather_df.to_csv(config['data_dir'] + '/wwo_cache.csv')
-        except ValueError:
-            print("unable to retrieve any new weather data")
+        else:
+            print("unable to retrieve any new weather data.")
             hist_weather_df = hist_weather_df_cache
 
+        hist_weather_df = hist_weather_df.infer_objects()
         joined_df = filtered_df.join(hist_weather_df, how='inner')
         joined_df.to_csv(config['data_dir'] + '/prepped_data.csv')
         joined_df.to_pickle(config['data_dir'] + '/prepped_data.pkl')
