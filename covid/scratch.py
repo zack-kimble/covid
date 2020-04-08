@@ -102,3 +102,12 @@ hist_weather_df_cache = hist_weather_df_cache.loc[hist_weather_df_cache.index.dr
 hist_weather_df_cache.index.is_unique
 
 stats.gamma(a=shape, scale=scale)
+
+
+#safegraph data exploration
+import pandas as pd
+social_distance = pd.read_csv('/home/zack/safegraph_data/social-distancing/v1/2020/02/01/2020-02-01-social-distancing.csv.gz')
+weekly_patter = pd.read_csv('/home/zack/safegraph_data/weekly-patterns/v1/main-file/2020-03-22-weekly-patterns.csv.gz')
+
+
+full_df.loc[[None]]
