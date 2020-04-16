@@ -111,3 +111,65 @@ weekly_patter = pd.read_csv('/home/zack/safegraph_data/weekly-patterns/v1/main-f
 
 
 full_df.loc[[None]]
+
+
+def calculate_latent_and_infectious_population(df, new_infection_field, incubation_dist, infectious_dist, index_cols,
+                                               prefix):
+    _df = df.reset_index().set_index(index_cols).copy()
+    _df[prefix + '_latent_array'] = _df[new_infection_field].apply(create_array_from_val, length=14)
+    _df[prefix + '_infectious_array'] = list(np.zeros(shape=(len(_df), 14)))
+    # loop through rows and update each date base on the previous date (within location)
+    for key in _df.index.values:
+        row = _df.loc[[key]].copy()
+        # Try to get previous day data
+        prev_key = np.array(key)
+        prev_key[-1] = prev_key[-1] + pd.Timedelta(days=-1)
+        prev_key = tuple(prev_key)
+        try:
+            prev_row = _df.loc[[prev_key]]
+            prev_latent = prev_row[prefix + '_latent_array'].values[0]
+            prev_infectious = prev_row[prefix + '_infectious_array'].values[0]
+        except KeyError:
+            prev_row = None
+            prev_latent = np.zeros(14)
+            prev_infectious = np.zeros(14)
+        new_latent = row[prefix + '_latent_array'].values[0]
+        new_infectious = row[prefix + '_infectious_array'].values[0]
+        # People with incubating virus either continue in incubation or proceed to infectious state
+        if np.any(prev_latent):
+            for day_number in range(1, len(prev_latent) - 1):
+                prev_day_num = day_number - 1
+                incubation_prob = incubation_dist.sf(day_number) / incubation_dist.sf(prev_day_num)
+                new_latent[day_number] = round_to_int_probablistic(prev_latent[prev_day_num] * incubation_prob)
+                new_infectious[0] += prev_latent[day_number - 1] - new_latent[day_number]
+            _df.loc[[key]][prefix + '_latent_array'] = list(new_latent.reshape(1, 14))
+        # Infectious individuals either continue being infectious or stop being infectious
+        if np.any(prev_infectious):
+            for day_number in range(1, len(prev_infectious) - 1):
+                prev_day_num = day_number - 1
+                infectious_prob = infectious_dist.sf(day_number) / infectious_dist.sf(prev_day_num)
+                new_infectious[day_number] = round_to_int_probablistic(prev_infectious[prev_day_num] * infectious_prob)
+            # remove positive cases from infectious pool (assume quarantined in some way)
+            n_infectious = sum(prev_infectious)
+            if n_infectious == 0:
+                p_caught = 0
+            else:
+                p_caught = row['new_cases'].values / n_infectious
+            new_infectious = new_infectious * (1 - p_caught)  # TODO round
+            _df.loc[[key]][prefix + '_infectious_array'] = list(new_infectious.reshape(1, 14))
+    _df[prefix + '_latent_population'] = _df[prefix + '_latent_array'].apply(np.sum)
+    _df[prefix + '_infectious_population'] = _df[prefix + '_infectious_array'].apply(np.sum)
+    return _df
+
+df = joined_df
+_df = df.reset_index().set_index(index_cols).copy()
+_df = _df.sort_index()
+_df.index.is_lexsorted()
+date = dates[0]
+
+x = _df.loc[60,date]
+x = _df.loc[(slice(None),date)]
+x = _df.loc[pd.IndexSlice[:, date],:]
+_df.query(f'a={date}')
+
+

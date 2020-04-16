@@ -19,7 +19,7 @@ from scipy import stats
 
 config = dict(
     source_data = 'data/us_data_pivoted.pkl',
-    index_cols = ['UID','iso2','iso3','code3','FIPS','Admin2','Province_State','Country_Region','Lat','Long_','Combined_Key','date'],
+    index_cols = ['FIPS','date'],
     case_fatality_rate = .02,
     onset_to_death_mean=14,
     onset_to_death_sdev=5,
@@ -132,60 +132,113 @@ def estimate_upstream_from_downstream(df, rate, offset_dist, index_cols, downstr
 def create_array_from_val(value, length):
     array = np.zeros(length)
     array[0] = value
-    return array  
+    return array
 
 #need this for making sure infections/incubations fall off correctly in tail.
 def round_to_int_probablistic(num):
     return int(np.floor(num + np.random.random()))
 
-def calculate_latent_and_infectious_population(df, new_infection_field, incubation_dist, infectious_dist, index_cols,prefix):
+def calculate_latent_and_infectious_population(df, new_infection_field, incubation_dist, infectious_dist, index_cols, prefix):
+
+    latent_array = prefix + '_latent_array'
+    infectious_array = prefix +'_infectious_array'
+    prev_latent_array = 'prev_' + latent_array
+    prev_infectious_array = 'prev_' + infectious_array
+    total_latent = 'total_' + latent_array
+    new_onsets = prefix + '_new_onsets'
+    non_date_index_cols = [x for x in index_cols if x != 'date']
+
     _df = df.reset_index().set_index(index_cols).copy()
-    _df[prefix+'_latent_array'] = _df[new_infection_field].apply(create_array_from_val, length=14)
-    _df[prefix+'_infectious_array'] = list(np.zeros(shape=(len(_df),14)))
-    # loop through rows and update each date base on the previous date (within location)
-    for key in _df.index.values:
-        row = _df.loc[[key]].copy()
-        #Try to get previous day data
-        prev_key = np.array(key)
-        prev_key[-1] = prev_key[-1] + pd.Timedelta(days=-1)
-        prev_key = tuple(prev_key)
-        try:
-            prev_row = _df.loc[[prev_key]]
-            prev_latent = prev_row[prefix+'_latent_array'].values[0]
-            prev_infectious = prev_row[prefix+'_infectious_array'].values[0]
-        except KeyError:
-            prev_row = None
-            prev_latent = np.zeros(14)
-            prev_infectious = np.zeros(14)
-        new_latent = row[prefix+'_latent_array'].values[0]
-        new_infectious = row[prefix+'_infectious_array'].values[0]
-        #People with incubating virus either continue in incubation or proceed to infectious state
-        if np.any(prev_latent):
-            for day_number in range(1, len(prev_latent)-1):
-                prev_day_num = day_number - 1
-                incubation_prob = incubation_dist.sf(day_number)/incubation_dist.sf(prev_day_num)
-                new_latent[day_number] = round_to_int_probablistic(prev_latent[prev_day_num] * incubation_prob)
-                new_infectious[0] += prev_latent[day_number-1] - new_latent[day_number]
-            _df.loc[[key]][prefix+'_latent_array'] = list(new_latent.reshape(1, 14))
-        #Infectious individuals either continue being infectious or stop being infectious
-        if np.any(prev_infectious):
-            for day_number in range(1, len(prev_infectious)-1):
-                prev_day_num = day_number - 1
-                infectious_prob = infectious_dist.sf(day_number)/infectious_dist.sf(prev_day_num)
-                new_infectious[day_number] = round_to_int_probablistic(prev_infectious[prev_day_num] * infectious_prob)
-            #remove positive cases from infectious pool (assume quarantined in some way)
-            n_infectious = sum(prev_infectious)
-            if n_infectious == 0:
-                p_caught = 0
-            else:
-                p_caught = row['new_cases'].values/n_infectious
-            new_infectious = new_infectious * (1-p_caught) #TODO round
-            _df.loc[[key]][prefix+'_infectious_array'] = list(new_infectious.reshape(1,14))
-    _df[prefix + '_latent_population'] = _df[prefix+'_latent_array'].apply(np.sum)
-    _df[prefix + '_infectious_population'] = _df[prefix+'_infectious_array'].apply(np.sum)
+    _df[latent_array] = _df[new_infection_field].apply(create_array_from_val, length=14)
+    _df[infectious_array] = list(np.zeros(shape=(len(_df), 14)))
+    _df[new_onsets] = 0
+
+    #create array of transition probalities
+    incubation_probs = incubation_dist.sf(np.linspace(0, 13, 14))
+    infection_probs = infectious_dist.sf(np.linspace(0, 13, 14))
+    #fips_date_range = _df.groupby(['FIPS']).aggregate(start_date=('date', 'min'), end_date=('date', 'max'))
+    start_date = _df.index.get_level_values('date').min() #TODO make date field name an arg
+    end_date = _df.index.get_level_values('date').max()
+    dates = pd.date_range(start_date, end_date)
+    #loop through days and update all locations based on previous day
+    for date in dates:
+        #get previous day's date
+        prev_date = date + pd.Timedelta(days=-1)
+        prev_date_sub_df = _df.loc[pd.IndexSlice[:, (prev_date, date)], :]
+
+        #Update Latent Array
+        #First get previous day's latent array
+        prev_latent_array_series = prev_date_sub_df[latent_array].groupby(level=non_date_index_cols).shift().loc[pd.IndexSlice[:, date]]
+        #TODO: add date back to index here so I don't have to use .values later on when assigning back to _df
+        #check for nan and replace with zero array if necessary. Must work on series of scalars, series of arrays, or mixed
+        #pd.fillna won't fill accept arrays for fill values, so doing this the slower way only when necessary
+        if np.any(pd.isna(prev_latent_array_series.sum(skipna=False))):
+            prev_latent_array_series.loc[prev_latent_array_series.isna()] = list(np.zeros(shape = (len(prev_latent_array_series[prev_latent_array_series.isna()]),14)))
+
+        #remember to not overwrite the latent_array[0] value written using create_array_from_val. Do ops on prev_laten_array, then add the two vectors.
+        #calculate total latent at end of previous day to use for finding new onsets later
+        prev_total_latent_series = prev_latent_array_series.apply(np.sum)
+        #calculate how many move to next day or have onset and become infectious
+        prev_latent_array_series = prev_latent_array_series.apply(lambda x: x * incubation_probs)
+        prev_latent_array_series = prev_latent_array_series.apply(np.vectorize(round_to_int_probablistic)) #TODO maybe just go change function instead of using vectorize
+        #Update the location within the infection trajectory (ie move day 1 infections to day 2)
+        prev_latent_array_series = prev_latent_array_series.apply(np.roll, shift=1)
+        #Put zero for the first day (will be replaced by existing value in latent_array)
+        prev_latent_array_series.apply(lambda x: np.put(x, 0, 0)) #np.put edits in place, which seems ok. Also ends up operating on each value in each array when used directly with Series.apply()
+        _df.loc[pd.IndexSlice[:, date], latent_array] = np.add(_df.loc[pd.IndexSlice[:, date],latent_array].values, prev_latent_array_series.values)
+        #sum all latent infections for a day
+        #_df.loc[pd.IndexSlice[:, date], total_latent] = _df.loc[pd.IndexSlice[:, date], latent_array].apply(np.sum)
+
+        #Update Infectious Array
+        #Calculate number of new onsets as total latent from previous day minus total latent of new day
+        _df.loc[pd.IndexSlice[:, date], new_onsets] = prev_total_latent_series.values - prev_latent_array_series.apply(np.sum).values
+        _df.loc[pd.IndexSlice[:, date], infectious_array] = _df.loc[pd.IndexSlice[:, date], new_onsets].apply(create_array_from_val, length=14)
+
+        prev_infectious_array_series = prev_date_sub_df[infectious_array].groupby(level=non_date_index_cols).shift().loc[pd.IndexSlice[:, date]]
+        #check for nan and replace with zero array if necessary. Must work on series of scalars, series of arrays, or mixed
+        #pd.fillna won't fill accept arrays for fill values, so doing this the slower way only when necessary
+        if np.any(pd.isna(prev_infectious_array_series.sum(skipna=False))):
+            prev_infectious_array_series.loc[prev_infectious_array_series.isna()] = list(np.zeros(shape = (len(prev_infectious_array_series[prev_infectious_array_series.isna()]),14)))
+
+        # remember to not overwrite the infectious_array[0] value written using create_array_from_val. Do ops on prev_laten_array, then add the two vectors.
+        # calculate total infectious at end of previous day to use for finding new onsets later
+        prev_total_infectious_series = prev_infectious_array_series.apply(np.sum)
+        # calculate how many move to next day or have onset and become infectious
+        prev_infectious_array_series = prev_infectious_array_series.apply(lambda x: x * infection_probs)
+        prev_infectious_array_series = prev_infectious_array_series.apply(np.vectorize(
+            round_to_int_probablistic))  # TODO maybe just go change function instead of using vectorize
+        # Update the location within the infection trajectory (ie move day 1 infections to day 2)
+        prev_infectious_array_series = prev_infectious_array_series.apply(np.roll, shift=1)
+        # Put zero for the first day (will be replaced by existing value in infectious_array)
+        prev_infectious_array_series.apply(lambda x: np.put(x, 0, 0))  # np.put edits in place, which seems ok. Also ends up operating on each value in each array when used directly with Series.apply()
+        _df.loc[pd.IndexSlice[:, date], infectious_array] = np.add(_df.loc[pd.IndexSlice[:, date], infectious_array].values, prev_infectious_array_series.values)
+
+
+
+
+
+        # #latent infections
+        # #first get data from previous day
+        # _df[prev_latent_array] = _df.groupby(level='FIPS')[latent_array].shift() #TODO parameterize 'FIPS"
+        # #multiply times incubation prob to get number still incubating
+        # _df[latent_array] = _df[prev_latent_array] * incubation_probs
+        # #progress to next day of incubation
+        # _df[latent_array] = _df[latent_array].apply(np.roll, shift=1)
+        # #_df[latent_array] = _df[latent_array].apply(np.put, ind=0, v=0)
+        #
+        # #Round to integer stochastically
+        # _df[latent_array] = _df[latent_array].apply(np.apply_along_axis, func1d=round_to_int_probablistic, axis=0)
+        # #calculate number of new onsets (exiting incubation regardless of symptoms)
+        # #_df[new_onsets] = _df[latent_array].apply()
+
+        #_df[infectious_array] = _df.groupby(level='FIPS')[infectious_array].shift()
+
+
+    _df[prefix + '_latent_population'] = _df[latent_array].apply(np.sum)
+    _df[prefix + '_infectious_population'] = _df[infectious_array].apply(np.sum)
     return _df
-    
-            
+
+
 
 cfr = config['case_fatality_rate']
 onset_to_death_mean = config['onset_to_death_mean']
@@ -198,7 +251,7 @@ infectious_scale = config['infectious_exponential']['scale']
 index_cols = config['index_cols']
 
 #calculate infection_fatality_rate from cfr and infection to case rate
-infetion_fatality_rate = infection_case_rate * cfr
+infection_fatality_rate = infection_case_rate * cfr
 
 #define distribution of incubation period
 incubation_dist = stats.lognorm(s=incubation_time_sdev,scale=np.exp(incubation_time_mean))
@@ -216,23 +269,31 @@ shape = mean/scale
 onset_to_death_dist = stats.gamma(a=shape, scale=scale)
 
 joined_df = pd.read_pickle(config['source_data'])
+joined_df = joined_df.reset_index().set_index(index_cols)
+
+#remove any values with non-unique indexes
+unique_index = ~joined_df.index.duplicated(keep=False)
+joined_df = joined_df.loc[unique_index]
 
 groupby = [x for x in index_cols if x != 'date']
 joined_df['new_deaths'] = joined_df.groupby(groupby)['deaths'].diff().clip(lower=0)
 joined_df['new_cases'] = joined_df.groupby(groupby)['cases'].diff().clip(lower=0)
-joined_df = joined_df.select_dtypes(include='number').fillna(0)
+num_columns = joined_df.select_dtypes(include='number').columns
+joined_df.loc[:,num_columns] = joined_df[num_columns].fillna(0)
 
-joined_df = joined_df.reset_index().set_index(index_cols)
+
+
 # Estimate the number of cases in the past by looking at daily new deaths and propogating backwards
 joined_df = estimate_upstream_from_downstream(joined_df, cfr, onset_to_death_dist, index_cols, 'new_deaths', 'cases_based_on_deaths')
 # Estimate infections times from those cases
 joined_df = estimate_upstream_from_downstream(joined_df, infection_case_rate, incubation_dist, index_cols, 'cases_based_on_deaths', 'infections_based_on_deaths')
-# Shift confirmed cases backwards to transmission 
+
+# Shift confirmed cases backwards to transmission
 joined_df = estimate_upstream_from_downstream(joined_df, infection_case_rate, incubation_dist, index_cols, 'new_cases', 'infections_based_on_cases')
 
-#joined_df.to_pickle('joined_df_test.pkl')
+joined_df.to_pickle('joined_df_test_us.pkl')
 
-#joined_df = pd.read_pickle('joined_df_test.pkl')
+#joined_df = pd.read_pickle('joined_df_test_us.pkl')
 
 #calculate infectious population
 
