@@ -19,7 +19,7 @@ from scipy import stats
 
 config = dict(
     source_data = 'data/us_data_pivoted.pkl',
-    index_cols = ['FIPS','date'],
+    index_cols = ['UID','date'],
     case_fatality_rate = .02,
     onset_to_death_mean=14,
     onset_to_death_sdev=5,
@@ -275,11 +275,20 @@ joined_df = joined_df.reset_index().set_index(index_cols)
 unique_index = ~joined_df.index.duplicated(keep=False)
 joined_df = joined_df.loc[unique_index]
 
+#remove any rows with nan index
+for index_col in index_cols:
+    valid = joined_df.index.get_level_values(index_col).notna()
+    if not np.all(valid):
+        print(f"removing some indexes because of nan in level: {index_col}")
+        joined_df = joined_df[valid]    
+
+#remove negatives values and nan
 groupby = [x for x in index_cols if x != 'date']
 joined_df['new_deaths'] = joined_df.groupby(groupby)['deaths'].diff().clip(lower=0)
 joined_df['new_cases'] = joined_df.groupby(groupby)['cases'].diff().clip(lower=0)
 num_columns = joined_df.select_dtypes(include='number').columns
-joined_df.loc[:,num_columns] = joined_df[num_columns].fillna(0)
+joined_df.loc[:, num_columns] = joined_df[num_columns].fillna(0)
+
 
 
 

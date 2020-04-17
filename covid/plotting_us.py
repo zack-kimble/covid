@@ -16,11 +16,12 @@ import matplotlib.dates as mdates
 joined_df = pd.read_pickle('data/us_data_with_latent_populations.pkl')
 joined_df.columns
 
-us_aggregate = joined_df.groupby('date').sum().reset_index()
+
 
 joined_df['infections_as_ratio_of_case_based_infectious_population'] = joined_df['infections_based_on_cases'] / joined_df[
     'case_based_infectious_population']
 
+us_aggregate = joined_df.groupby('date').sum().reset_index()
 us_aggregate['infections_as_ratio_of_case_based_infectious_population'] = us_aggregate['infections_based_on_cases'] / us_aggregate[
     'case_based_infectious_population']
 
