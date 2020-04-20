@@ -1,4 +1,5 @@
 # covid
+Very much WIP and includes several different approaches based on different data sets.
 
 Data analysis on COVID-19 epidemiology data.
 
