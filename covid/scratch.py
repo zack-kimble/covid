@@ -82,10 +82,26 @@ scale = np.exp(config['incubation_log_normal']['mean'])
 
 x = np.linspace(stats.lognorm.ppf(0.01, s,scale=scale),stats.lognorm.ppf(0.99, s, scale=scale), 100)
 
+incubation_dist = stats.lognorm(s=incubation_time_sdev,scale=np.exp(incubation_time_mean))
+
+trajectory = np.linspace(0, 13, 14)
+incubation_probs = incubation_dist.sf(trajectory)
+incubation_probs2 = incubation_dist.sf(trajectory)/incubation_dist.sf(trajectory-1)
+
+start_pop = np.zeros_like(trajectory)
+start_pop[0] = 1
+for i in range(1,len(start_pop)):
+    start_pop[i] = start_pop[i-1] *  incubation_probs2[i]
+
+sns.lineplot(x=trajectory,y=start_pop)
+    
+
 sns.lineplot(x=x,y=stats.lognorm.pdf(x,s,scale=scale))
 sns.lineplot(x=x,y=stats.lognorm.cdf(x,s,scale=scale))
 sns.lineplot(x=x,y=stats.lognorm.sf(x,s,scale=scale))
 sns.lineplot(x=x,y=stats.lognorm.sf(x,s,scale=scale)/stats.lognorm.sf(x-1,s,scale=scale))
+
+
 
 stats.lognorm.sf(5,s,scale=scale)
 

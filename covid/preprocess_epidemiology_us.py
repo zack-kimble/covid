@@ -154,8 +154,9 @@ def calculate_latent_and_infectious_population(df, new_infection_field, incubati
     _df[new_onsets] = 0
 
     #create array of transition probalities
-    incubation_probs = incubation_dist.sf(np.linspace(0, 13, 14))
-    infection_probs = infectious_dist.sf(np.linspace(0, 13, 14))
+    day_vector = np.linspace(0, 13, 14)
+    incubation_probs = incubation_dist.sf(day_vector)/incubation_dist.sf(day_vector-1)
+    infection_probs = infectious_dist.sf(day_vector)/infectious_dist.sf(day_vector-1)
     #fips_date_range = _df.groupby(['FIPS']).aggregate(start_date=('date', 'min'), end_date=('date', 'max'))
     start_date = _df.index.get_level_values('date').min() #TODO make date field name an arg
     end_date = _df.index.get_level_values('date').max()

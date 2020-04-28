@@ -1,6 +1,7 @@
 import os, glob
 import pandas as pd
 import numpy as np
+import pymc3 as pm
 
 config = dict(
     safegraph_data_path = '~/safegraph_data/',
@@ -89,3 +90,15 @@ social_dist_county_df['pct_staying_home'] = social_dist_county_df['adjusted_comp
 # Priors? Maximally uninformative or lump a couple weeks in Jan as a baseline?
 
 social_dist_county_df.to_pickle('data/social_dist_county_df.pkl')
+
+n_counties = social_dist_df
+
+with pm.Model() as staying_home_model:
+    #Uniformative prior for national
+    nat_mu = pm.Beta('phi', alpha=.01, beta=.01)
+    nat_nu = pm.Gamma('kappa', mu=1, sigma=1)
+    state_mus = pm.Beta(alpha=nat_mu*nat_nu,  beta= (1-nat_mu)*nat_nu, shape=50)
+    state_nus = pm.Gamma('kappa', mu=1, sigma=1, shape=50)
+    county_thetas = pm.Beta(alpha=state_mus*state_nus, beta= (1-state_mus)*state_nus, shape=)
+    y = pm.Binomial('y', n=panel_pop, p=cbg_thetas, observed=completely_home_device_count)
+

@@ -12,7 +12,7 @@ import io
 import numpy as np
 
 config = dict(
-    use_local=True,
+    use_local=False,
     index_col=['UID','date'],
     desc_col = ['iso2','iso3','code3','FIPS','Admin2','Province_State','Country_Region','Lat','Long_','Combined_Key'],
     data_dir='data/'
