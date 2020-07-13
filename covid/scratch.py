@@ -189,3 +189,34 @@ x = _df.loc[pd.IndexSlice[:, date],:]
 _df.query(f'a={date}')
 
 
+# understanding loc and scale for beta
+
+import scipy.stats
+import seaborn as sns
+
+import scipy.stats
+import numpy as np
+
+x = np.linspace(0,1,100)
+x2 = np.linspace(0,100, 1000)
+
+y = scipy.stats.beta(6,10).pdf(x)
+y2 = scipy.stats.beta(6,10, scale=2).pdf(x)
+y3 = scipy.stats.beta(6,10, loc=.1).pdf(x)
+#not a standard_beta = scipy.stats.beta(a=0, b=1).pdf(x)
+rands = scipy.stats.beta(50,5).rvs(100000)
+mean = np.mean(rands)
+error_dist = rands - mean
+sns.kdeplot(rands)
+sns.kdeplot(error_dist)
+sns.kdeplot()
+sns.lineplot(x,y)
+sns.lineplot(x,y2)
+sns.lineplot(x,y3)
+
+x1 = np.linspace(0,1,100)
+y1 = np.exp(pm.Gamma.dist( mu=1, sigma=1, shape=n_dates).logp(x).eval())
+y2 = pm.HalfCauchy.dist(5).logp(x2).eval()
+sns.lineplot(x1,y1)
+
+sns.lineplot(x2,y2)
