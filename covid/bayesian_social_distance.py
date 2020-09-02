@@ -14,47 +14,47 @@ social_dist_df = pd.read_pickle('data/social_dist_and_county_raw.pkl')
 social_dist_df = social_dist_df.loc[:,['date','state_fips','county_fips','device_count','completely_home_device_count']]
 social_dist_df = social_dist_df.loc[social_dist_df['date'] < pd.to_datetime('2020-01-05')]
 
-#create various combined id's to make lookup easier
-social_dist_df['county_fips_date'] = social_dist_df['county_fips'] + social_dist_df['date'].astype(str)
-social_dist_df['state_fips_date'] = social_dist_df['state_fips'] + social_dist_df['date'].astype(str)
+# #create various combined id's to make lookup easier
+# social_dist_df['county_fips_date'] = social_dist_df['county_fips'] + social_dist_df['date'].astype(str)
+# social_dist_df['state_fips_date'] = social_dist_df['state_fips'] + social_dist_df['date'].astype(str)
 
-print('getting unique date values')
-unique_dates = social_dist_df['date'].unique()
-n_dates = len(unique_dates)
-date_lookup =  dict(zip(unique_dates, range(n_dates)))
+# print('getting unique date values')
+# unique_dates = social_dist_df['date'].unique()
+# n_dates = len(unique_dates)
+# date_lookup =  dict(zip(unique_dates, range(n_dates)))
 
-print('getting unique state values')
-unique_states = social_dist_df['state_fips'].unique()
-n_states = len(unique_states)
-state_lookup =  dict(zip(unique_states, range(n_states)))
+# print('getting unique state values')
+# unique_states = social_dist_df['state_fips'].unique()
+# n_states = len(unique_states)
+# state_lookup =  dict(zip(unique_states, range(n_states)))
 
-print('getting unique county values')
-unique_counties = social_dist_df['county_fips'].unique()
-n_counties = len(unique_counties)
-county_lookup = dict(zip(unique_counties, range(n_counties)))
-county_idx = social_dist_df['county_fips'].map(county_lookup).values
+# print('getting unique county values')
+# unique_counties = social_dist_df['county_fips'].unique()
+# n_counties = len(unique_counties)
+# county_lookup = dict(zip(unique_counties, range(n_counties)))
+# county_idx = social_dist_df['county_fips'].map(county_lookup).values
 
-print('getting unique date/state values')
-unique_dates_states = social_dist_df[['state_fips_date', 'state_fips','date']].drop_duplicates()
-n_dates_states = len(unique_dates_states)
-date_to_state_idx = unique_dates_states['date'].map(date_lookup).values
-#for next section
-dates_states_lookup = dict(zip(unique_dates_states['state_fips_date'], range(n_dates_states)))
+# print('getting unique date/state values')
+# unique_dates_states = social_dist_df[['state_fips_date', 'state_fips','date']].drop_duplicates()
+# n_dates_states = len(unique_dates_states)
+# date_to_state_idx = unique_dates_states['date'].map(date_lookup).values
+# #for next section
+# dates_states_lookup = dict(zip(unique_dates_states['state_fips_date'], range(n_dates_states)))
 
-print('getting unique date/county values') #State is implied because we use county fips which contains state info
-#making combined identifier to make replacement easier
-unique_dates_states_counties = social_dist_df[['county_fips_date','county_fips','state_fips_date']].drop_duplicates()
-n_dates_states_counties = len(unique_dates_states_counties)
-date_to_state_to_county_idx = unique_dates_states_counties['state_fips_date'].map(dates_states_lookup).values
-#for next section
-dates_states_counties_lookup =  dict(zip(unique_dates_states_counties['county_fips_date'], range(n_dates_states_counties)))
+# print('getting unique date/county values') #State is implied because we use county fips which contains state info
+# #making combined identifier to make replacement easier
+# unique_dates_states_counties = social_dist_df[['county_fips_date','county_fips','state_fips_date']].drop_duplicates()
+# n_dates_states_counties = len(unique_dates_states_counties)
+# date_to_state_to_county_idx = unique_dates_states_counties['state_fips_date'].map(dates_states_lookup).values
+# #for next section
+# dates_states_counties_lookup =  dict(zip(unique_dates_states_counties['county_fips_date'], range(n_dates_states_counties)))
 
-print('make last index for cbg to county lookup')
-date_to_state_to_county_to_cbg_index = social_dist_df['county_fips_date'].map(dates_states_counties_lookup).values
+# print('make last index for cbg to county lookup')
+# date_to_state_to_county_to_cbg_index = social_dist_df['county_fips_date'].map(dates_states_counties_lookup).values
 
 
-device_count = social_dist_df['device_count']
-completely_home_device_count = social_dist_df['completely_home_device_count']
+# device_count = social_dist_df['device_count']
+# completely_home_device_count = social_dist_df['completely_home_device_count']
 
 
 
@@ -70,21 +70,76 @@ completely_home_device_count = social_dist_df['completely_home_device_count']
 #     y = pm.Binomial('y', n=device_count, p=county_thetas[date_to_state_to_county_to_cbg_index], observed=completely_home_device_count)
 
 #Non-centered hiearchical model with logistic link function (essentially GLM with just an intercept)
+# with pm.Model() as staying_home_model:
+#     #National prior
+#     date_mus = pm.Normal('date_mus', mu=-.8, sigma= 1, shape=n_dates)
+#     date_sigmas = pm.HalfNormal('date_sigmas', sigma=.17, shape = n_dates) #half normal because we don't actually want very fat tails, since everything gets squished by logistic function anyway
+#     state_offsets = pm.Normal('state_offsets', mu=0, sd=1, shape=n_dates_states)
+#     state_mus = pm.Deterministic('state_mus', date_mus[date_to_state_idx] + state_offsets * date_sigmas[date_to_state_idx])
+#     state_sigmas = pm.HalfNormal('state_sigmas', sigma=.15, shape = n_dates_states) #variance within states is independent between states
+#     county_offsets = pm.Normal('county_offsets', mu=0, sd=1, shape=n_dates_states_counties)
+#     county_betas = pm.Deterministic('county_betas', state_mus[date_to_state_to_county_idx] + county_offsets * state_sigmas[date_to_state_to_county_idx])
+#     county_thetas = pm.Deterministic('county_thetas', pm.math.sigmoid(county_betas))
+#     y = pm.Binomial('y', n=device_count, p=county_thetas[date_to_state_to_county_to_cbg_index], observed=completely_home_device_count)
+
+# Single day model
+#create various combined id's to make lookup easier
+social_dist_df['county_fips_date'] = social_dist_df['county_fips'] + social_dist_df['date'].astype(str)
+social_dist_df['state_fips_date'] = social_dist_df['state_fips'] + social_dist_df['date'].astype(str)
+
+print('restrict to single day')
+social_dist_df =  social_dist_df.loc[social_dist_df['date'] == pd.to_datetime('2020-01-01')]
+
+print('getting unique state values')
+unique_states = social_dist_df['state_fips'].unique()
+n_states = len(unique_states)
+states_lookup =  dict(zip(unique_states, range(n_states)))
+
+print('getting unique county values')
+unique_counties = social_dist_df['county_fips'].unique()
+n_counties = len(unique_counties)
+county_lookup = dict(zip(unique_counties, range(n_counties)))
+county_idx = social_dist_df['county_fips'].map(county_lookup).values
+
+# print('getting unique date/state values')
+# unique_dates_states = social_dist_df[['state_fips_date', 'state_fips','date']].drop_duplicates()
+# n_dates_states = len(unique_dates_states)
+# date_to_state_idx = unique_dates_states['date'].map(date_lookup).values
+# #for next section
+# dates_states_lookup = dict(zip(unique_dates_states['state_fips_date'], range(n_dates_states)))
+
+print('getting unique state/county values') #State is implied because we use county fips which contains state info
+#making combined identifier to make replacement easier
+unique_states_counties = social_dist_df[['county_fips','state_fips']].drop_duplicates()
+n_states_counties = len(unique_states_counties)
+state_to_county_idx = unique_states_counties['state_fips'].map(states_lookup).values
+#for next section
+states_counties_lookup =  dict(zip(unique_states_counties['county_fips'], range(n_states_counties)))
+
+print('make last index for cbg to county lookup')
+state_to_county_to_cbg_index = social_dist_df['county_fips'].map(states_counties_lookup).values
+
+
+device_count = social_dist_df['device_count']
+completely_home_device_count = social_dist_df['completely_home_device_count']
+
+#Daily non-centered hiearchical model with logistic link function (essentially GLM with just an intercept)
 with pm.Model() as staying_home_model:
-    #National prior
-    date_mus = pm.Normal('date_mus', mu=0, sigma= 1, shape=n_dates)
-    date_sigmas = pm.HalfNormal('date_sigmas', sigma=.25, shape = n_dates) #half normal because we don't actually want very fat tails, since everything gets squished by logistic function anyway
-    state_offsets = pm.Normal('state_offsets', mu=0, sd=1, shape=n_dates_states)
-    state_mus = pm.Deterministic('state_mus', date_mus[date_to_state_idx] + state_offsets * date_sigmas[date_to_state_idx])
-    state_sigmas = pm.HalfNormal('state_sigmas', sigma=.25, shape = n_dates_states) #variance within states is independent between states
-    county_offsets = pm.Normal('county_offsets', mu=0, sd=1, shape=n_dates_states_counties)
-    county_betas = pm.Deterministic('county_betas', state_mus[date_to_state_to_county_idx] + county_offsets * state_sigmas[date_to_state_to_county_idx])
+    state_mus = pm.Normal('date_mus', mu=-.8, sigma= 1, shape=n_states)
+    state_sigmas = pm.HalfNormal('state_sigmas', sigma=.15, shape = n_states) #variance within states is independent between states
+    county_offsets = pm.Normal('county_offsets', mu=0, sd=1, shape=n_states_counties)
+    county_betas = pm.Deterministic('county_betas', state_mus[state_to_county_idx] + county_offsets * state_sigmas[state_to_county_idx])
     county_thetas = pm.Deterministic('county_thetas', pm.math.sigmoid(county_betas))
-    y = pm.Binomial('y', n=device_count, p=county_thetas[date_to_state_to_county_to_cbg_index], observed=completely_home_device_count)
+    y = pm.Binomial('y', n=device_count, p=county_thetas[state_to_county_to_cbg_index], observed=completely_home_device_count)
+
 
 print('starting MCMC')
 with staying_home_model:
     trace = pm.sample()
+
+with open('data/county_trace.pkl','wb') as f:
+    pickle.dump(trace, f)
+
 
 with staying_home_model:
     prior_sample = pm.sample_prior_predictive()
@@ -150,32 +205,70 @@ az.plot_posterior(trace, var_names='county_thetas', combined=False)
 import seaborn as sns
 sns.kdeplot(prior_sample['y'])
 
-date_mus = trace.get_values('date_mus').reshape((4,-1))
-date_sigmas = trace.get_values('date_sigmas').reshape((4,-1))
-county_thetas = trace.get_values('county_thetas', combine=False)
-county_thetas.shape
- 
+date_mus = trace.get_values('date_mus',combine=False)
+date_mus = np.array(date_mus)
+date_mus.shape
 
-for chain in date_mus:
-    sns.kdeplot(chain)
+date_sigmas = trace.get_values('date_sigmas',combine=False)
+date_sigmas = np.array(date_sigmas)
+date_sigmas.shape
 
-for chain in date_sigmas:
-    sns.kdeplot(chain)
-    
-for chain in county_thetas:
-    print(np.mean(chain))
-    #sns.kdeplot(chain)
+state_offsets = trace.get_values('state_offsets',combine=False)
+state_offsets = np.array(state_offsets)
+state_offsets.shape
+
+state_sigmas = trace.get_values('state_sigmas',combine=False)
+state_sigmas = np.array(state_sigmas)
+state_sigmas.shape
+
+county_offsets = trace.get_values('county_offsets',combine=False)
+county_offsets = np.array(county_offsets)
+county_offsets.shape
+
+
+
+for chain in state_offsets:
+    print(chain.shape)
+    print( np.mean(np.mean(chain, axis=1)))
+    print(np.mean(np.std(chain, axis=1)))
+
+
+for chain in county_offsets:
+    print(chain.shape)
+    print( np.mean(np.mean(chain, axis=1)))
+    print(np.mean(np.std(chain, axis=1)))
+
+for chain in state_sigmas:
+    print(state_sigmas.shape)
+    print( np.mean(np.mean(state_sigmas, axis=1)))
+    print(np.mean(np.std(state_sigmas, axis=1)))
+
+
+
+np.mean(state_offsets[0],axis=1)
+np.std(state_offsets[0],axis=0)
+
+trace.stat_names
+sum(trace.get_sampler_stats('diverging'))
+
+rhat = pm.stats.rhat(trace)
+
+for key in rhat.keys():
+    mean = np.mean(rhat[key])
+    print(f'{key}: {mean}')
+
 
     
 for chain in     
 
 thetas = trace.get_values('county_thetas', combine=False)
-thetas.shape
-thetas = np.array(thetas)
-thetas[:,:,0]
-thetas[...,0]
 
-for chain in thetas[...,0]:    
+thetas = np.array(thetas)
+thetas.shape
+thetas[:,:,0].shape
+thetas[...,0].shape
+
+for chain in thetas[...,5]:    
     sns.distplot(chain)
 
 
